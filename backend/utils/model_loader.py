@@ -40,7 +40,6 @@ class PredictConfig:
 
 class ModelLoader:
     """Generic loader that supports YOLOv11 and archived YOLOv7 models."""
-            return True
     def __init__(
         self,
         model_path: Optional[str] = None,
@@ -280,7 +279,7 @@ class ModelLoader:
     def load_model(self) -> bool:
         if self._loaded:
             logger.info("Model already loaded, skipping reload.")
-                return True
+            return True
         try:
             model_path = self._get_default_model_path()
             print(f"[DEBUG] model_path: {model_path}")
@@ -289,7 +288,7 @@ class ModelLoader:
                 try:
                     import onnxruntime as ort
                     print("[DEBUG] Loading ONNX model via onnxruntime...")
-                    self.ort_session = ort.InferenceSession(model_path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+                    self.ort_session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
                     self.model_type = "onnx"
                     logger.info(f"ONNX model loaded: {model_path}")
                 except Exception as e:
@@ -303,7 +302,7 @@ class ModelLoader:
             logger.info(f"  model_path: {model_path}")
             logger.info(f"  model_type: {self.model_type}")
             logger.info(f"  device: {self.device}")
-                return True
+            return True
         except Exception as exc:
             print(f"[FATAL] Model loading failed: {exc}")
             import traceback

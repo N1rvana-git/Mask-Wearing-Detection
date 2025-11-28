@@ -10,7 +10,8 @@
 .video-shell {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  /* Dr. Chen: 改为 3:4 或直接去掉 aspect-ratio 让它自适应 */
+  aspect-ratio: 3 / 4;
   border-radius: 24rpx;
   overflow: hidden;
   background: #1f2937;

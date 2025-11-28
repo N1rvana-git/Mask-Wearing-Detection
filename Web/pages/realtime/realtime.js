@@ -12,18 +12,29 @@ Page({
     }
   },
   onReady() {
-    console.log('[onReady] Page ready, initializing components...');
-    this.cameraContext = wx.createCameraContext();
-    console.log('[onReady] Camera context:', this.cameraContext ? 'Created' : 'FAILED');
-    this.lastFrameTs = 0;
-    this.framesSent = 0;
-    this.overlayReady = false;
-    this.encoderReady = false;
-    this.canvasReady = false;
-    this._initOverlayCanvas();
-    this._initEncoderCanvas();
-    this._connectSocket();
-    console.log('[onReady] Complete. Overlay ready:', this.overlayReady, 'Encoder ready:', this.encoderReady);
+    console.log('[onReady] Page ready, waiting for layout...');
+    
+    // Dr. Chen: 增加 500ms 延时，解决真机 Canvas 节点未就绪的问题
+    setTimeout(() => {
+        this.cameraContext = wx.createCameraContext();
+        this.lastFrameTs = 0;
+        this.framesSent = 0;
+        this.overlayReady = false;
+        this.encoderReady = false;
+        this.canvasReady = false;
+        
+        // 初始化 Canvas
+        this._initOverlayCanvas();
+        this._initEncoderCanvas();
+        
+        // 连接 Socket
+        this._connectSocket();
+        
+        console.log('[onReady] Initialization triggered after delay.');
+        
+        // Dr. Chen: 尝试自动启动流 (可选，方便调试)
+        // this._startStreaming(); 
+    }, 500);
   },
   onUnload() {
     this._stopStreaming();
@@ -61,7 +72,7 @@ Page({
   _connectSocket() {
     if (this.socket) return;
     // 修改为你的实际电脑局域网IP和8000端口
-    const url = app?.globalData?.apiBaseUrl || "ws://192.168.1.5:8080/ws";
+    const url = app?.globalData?.apiBaseUrl || "ws://192.168.1.4:5000/ws";
     this.socket = wx.connectSocket({ url });
     this.socket.onOpen(() => {
       this.setData({ connected: true });
@@ -76,7 +87,10 @@ Page({
     this.socket.onMessage(evt => {
       try {
         const payload = JSON.parse(evt.data);
-        this._renderDetections(payload.detections || []);
+        
+        // Dr. Chen 修正：把整个 payload 传进去，而不仅是 detections
+        this._renderDetections(payload); 
+        
         this.setData({
           stats: {
             fps: payload.fps || this.data.stats.fps,
@@ -94,26 +108,61 @@ Page({
       this.socket = null;
     }
   },
-  _renderDetections(detections) {
+  _renderDetections(payload) {
+    // 注意：参数改为 payload，包含 detections 和 image_shape
+    const detections = payload.detections || [];
+    const imageShape = payload.image_shape || [853, 480]; // 默认防错 [高, 宽]
+    
     if (!this.overlayReady || !this.overlayCtx || !this.overlayCanvasNode) return;
+    
     const ctx = this.overlayCtx;
     const canvas = this.overlayCanvasNode;
+    
+    // 1. 获取比例因子
+    // imageShape 来自后端 Python (H, W, C)，所以 0是高，1是宽
+    const frameHeight = imageShape[0];
+    const frameWidth = imageShape[1];
+    
+    const scaleX = canvas.width / frameWidth;
+    const scaleY = canvas.height / frameHeight;
+
+    // 2. 清空画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#22c55e";
-    ctx.lineWidth = 3;
-    ctx.font = "16px sans-serif";
-    ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+    
+    // 3. 绘制
     detections.forEach(item => {
-      const [x1, y1, x2, y2] = item.bbox || [];
+      // 获取原始坐标
+      let [x1, y1, x2, y2] = item.bbox || [];
+      
+      // 执行缩放 (关键步骤！)
+      x1 = x1 * scaleX;
+      y1 = y1 * scaleY;
+      x2 = x2 * scaleX;
+      y2 = y2 * scaleY;
+      
       const width = x2 - x1;
       const height = y2 - y1;
+
+      // 根据类别选择颜色
+      const isMask = item.class_name === 'mask';
+      const color = isMask ? "#22c55e" : "#ef4444"; // 绿 vs 红
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.font = "16px sans-serif";
+      
+      // 画框
       ctx.strokeRect(x1, y1, width, height);
-      const label = `${item.class_name || "mask"} ${(item.confidence || 0).toFixed(2)}`;
+      
+      // 画标签背景
+      const label = `${item.class_name} ${(item.confidence || 0).toFixed(2)}`;
       const textWidth = ctx.measureText(label).width + 8;
+      ctx.fillStyle = color;
       ctx.fillRect(x1, y1 - 20, textWidth, 20);
-      ctx.fillStyle = "#f8fafc";
+      
+      // 画文字
+      ctx.fillStyle = "#ffffff";
       ctx.fillText(label, x1 + 4, y1 - 6);
-      ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
     });
   },
   toggleStreaming() {
@@ -207,17 +256,22 @@ Page({
       return;
     }
     ctx.putImageData(imageData, 0, 0);
-    canvas.toDataURL({
-      quality: 0.8,
-      success: res => {
+    
+    // Dr. Chen 修正：toDataURL 是同步方法，直接获取返回值
+    // 第一个参数是图片格式，第二个是质量(0-1)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    
+    // 只有拿到数据才发送
+    if (dataUrl && dataUrl.length > 100) {
         this.socket.send({
-          data: JSON.stringify({
-            type: "frame",
-            payload: res.data
-          })
+            data: JSON.stringify({
+                type: "frame",
+                payload: dataUrl
+            })
         });
-      }
-    });
+    } else {
+        console.error('Frame encoding failed');
+    }
   },
   switchCamera() {
     const next = this.data.devicePosition === "front" ? "back" : "front";

@@ -175,32 +175,48 @@ class YOLOv11MaskDetectionTrainer:
         # 训练配置
         train_args = {
             'data': self.data_path,
-            'epochs': self.epochs,
+            'epochs': 200,  # Dr. Chen: 延长训练轮数到 200
             'imgsz': self.img_size,
-            'batch': self.batch_size,
+            'batch': 16,    # Dr. Chen: 显存受限，物理 Batch 设为 16 (或 32，视显存而定)
+            
+            # --- 陈金鹏老师的建议 (梯度累积) ---
+            # nbs (Nominal Batch Size) 设为 64。
+            # 逻辑：如果物理 batch=16，框架会自动累计 64/16 = 4 次梯度再更新。
+            # 效果：等效于 64 batch size 的稳定性，解决 Precision 震荡。
+            'nbs': 64,      
+            # -------------------------------
+
             'device': self.device,
             'project': self.project,
-            'name': 'custom' if use_custom else 'baseline',
+            'name': 'custom_v2_accum', # 改个名字方便区分
             'exist_ok': True,
-            # 性能优化
+            
+            # --- Hawkeye 的增强策略 (提升 Recall) ---
+            'optimizer': 'auto',
             'workers': self.workers,
-            'amp': torch.cuda.is_available(),
-            'cache': False,
-            # 数据增强
+            'amp': True,    # 必须开启混合精度以节省显存
+            
+            # 针对遮挡和密集人群的增强
             'mosaic': 1.0,
-            'mixup': 0.1,
-            'copy_paste': 0.1,
-            'degrees': 10.0,
+            'mixup': 0.2,       # 从 0.1 提升到 0.2
+            'copy_paste': 0.3,  # 从 0.1 提升到 0.3 (关键！)
+            
+            # 几何增强
+            'degrees': 15.0,    # 增加旋转角度
             'translate': 0.1,
             'scale': 0.5,
             'shear': 2.0,
-            'perspective': 0.0,
+            'perspective': 0.0005,
             'flipud': 0.0,
             'fliplr': 0.5,
+            
+            # 光照增强
             'hsv_h': 0.015,
             'hsv_s': 0.7,
             'hsv_v': 0.4,
-            # 保存配置
+            
+            # 训练策略
+            'close_mosaic': 15, # 最后 15 轮关闭 Mosaic，精细微调
             'save': True,
             'save_period': 10,
             'plots': True,

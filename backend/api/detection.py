@@ -35,10 +35,11 @@ class MaskDetectionAPI:
         self.max_detections = DEFAULT_MAX_DETECTIONS
         self.img_size = DEFAULT_IMAGE_SIZE
 
-        self.class_names: Dict[int, str] = {0: "no_mask", 1: "mask"}
+        self.class_names: Dict[int, str] = {0: "mask", 1: "no_mask"}
+        
         self.colors = {
-            "no_mask": (0, 0, 255),
-            "mask": (0, 255, 0),
+            "no_mask": (0, 0, 255), # 没戴口罩显示红色框
+            "mask": (0, 255, 0),    # 戴口罩显示绿色框
         }
 
         self.detection_stats = {
@@ -115,49 +116,95 @@ class MaskDetectionAPI:
     # ------------------------------------------------------------------
     # YOLOv11 path
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 替换 backend/api/detection.py 中的 _detect_with_yolov11 方法
+    # ------------------------------------------------------------------
     def _detect_with_yolov11(self, image: np.ndarray, return_annotated: bool) -> Dict[str, Any]:
-        # ONNXRuntime分支
+        import cv2
+        import numpy as np
+
+        # 1. ONNX 推理分支
         if self.model_loader.model_type == "onnx":
-            import cv2
-            import numpy as np
             ort_session = self.model_loader.ort_session
             input_name = ort_session.get_inputs()[0].name
+            
+            # 图像预处理
+            img_h, img_w = image.shape[:2]
             img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             img = cv2.resize(img, (self.img_size, self.img_size))
             img = img.astype(np.float32) / 255.0
-            img = np.transpose(img, (2, 0, 1))  # HWC->CHW
-            img = np.expand_dims(img, axis=0)  # batch
-            # ONNX推理
+            img = np.transpose(img, (2, 0, 1)) 
+            img = np.expand_dims(img, axis=0)
+            
+            # 执行推理
             outputs = ort_session.run(None, {input_name: img})
-            # 假设输出格式为 [boxes, scores, class_ids]，需根据实际模型导出格式调整
-            # 这里以常见YOLO导出格式为例
+            
+            # 2. 后处理 (Decoding & NMS)
+            # 输出形状通常是 (1, 4+nc, 8400) -> 需要转置为 (1, 8400, 4+nc)
+            pred = np.transpose(outputs[0], (0, 2, 1))
+            data = pred[0] # 取第一个 batch, 形状 (8400, 7) [cx, cy, w, h, score_cls1, score_cls2, score_cls3]
+            
+            boxes = []
+            confidences = []
+            class_ids = []
+            
+            # 提取数据
+            # data[:, 0:4] 是坐标
+            # data[:, 4:] 是类别概率
+            scores = data[:, 4:]
+            # 获取每个框的最大类别分数和索引
+            max_scores = np.max(scores, axis=1)
+            argmax_indices = np.argmax(scores, axis=1)
+            
+            # 过滤低置信度
+            mask = max_scores > self.conf_threshold
+            filtered_boxes = data[mask, 0:4]
+            filtered_scores = max_scores[mask]
+            filtered_classes = argmax_indices[mask]
+            
+            # 转换坐标 & 收集用于 NMS 的数据
+            # YOLO 输出是 [cx, cy, w, h] (归一化或像素值，这里通常是基于 640x640 的像素值)
+            # 我们需要还原到原图尺寸
+            scale_x = img_w / self.img_size
+            scale_y = img_h / self.img_size
+            
+            for i in range(len(filtered_boxes)):
+                cx, cy, w, h = filtered_boxes[i]
+                
+                # 还原到原图坐标
+                # 转换中心点到左上角
+                x = int((cx - w / 2) * scale_x)
+                y = int((cy - h / 2) * scale_y)
+                w = int(w * scale_x)
+                h = int(h * scale_y)
+                
+                boxes.append([x, y, w, h])
+                confidences.append(float(filtered_scores[i]))
+                class_ids.append(int(filtered_classes[i]))
+            
+            # 执行 NMS (非极大值抑制)
+            indices = cv2.dnn.NMSBoxes(boxes, confidences, self.conf_threshold, self.iou_threshold)
+            
             detections = []
-            annotated_image = None
-            # 兼容ultralytics/yolov5/7/11n常见ONNX输出格式
-            if len(outputs) == 1:
-                # [batch, num_boxes, 6] (x1,y1,x2,y2,score,class)
-                pred = outputs[0]
-                if isinstance(pred, list):
-                    pred = np.array(pred)
-                if pred.ndim == 3:
-                    pred = pred[0]
-                for det in pred:
-                    x1, y1, x2, y2, conf, class_id = det.tolist()
-                    if conf < self.conf_threshold:
-                        continue
-                    class_id = int(class_id)
+            if len(indices) > 0:
+                for i in indices.flatten():
+                    x, y, w, h = boxes[i]
+                    class_id = class_ids[i]
+                    conf = confidences[i]
                     class_name = self.class_names.get(class_id, f"class_{class_id}")
+                    
                     detections.append({
-                        "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                        "confidence": float(conf),
+                        "bbox": [x, y, x + w, y + h], # 转为 [x1, y1, x2, y2]
+                        "confidence": conf,
                         "class_id": class_id,
                         "class_name": class_name,
-                        "center": [int((x1 + x2) / 2), int((y1 + y2) / 2)],
-                        "area": int((x2 - x1) * (y2 - y1)),
+                        "center": [x + w // 2, y + h // 2],
+                        "area": w * h,
                     })
-            # 可根据实际ONNX输出格式补充更多分支
+
             if return_annotated:
                 annotated_image = self._annotate_image(image.copy(), detections)
+                
             return {
                 "success": True,
                 "detections": detections,
@@ -165,12 +212,13 @@ class MaskDetectionAPI:
                 "detection_count": len(detections),
                 "annotated_image": annotated_image if return_annotated else None,
             }
-        # PyTorch/Ultralytics分支
+
+        # PyTorch/Ultralytics 分支 (保持不变)
         model = self.model_loader.get_model()
         device_arg = str(self.model_loader.device)
         half_precision = self.model_loader.device.type == "cuda"
 
-        results = model.predict(  # type: ignore[call-arg]
+        results = model.predict(
             source=image,
             conf=self.conf_threshold,
             iou=self.iou_threshold,
@@ -180,7 +228,11 @@ class MaskDetectionAPI:
             half=half_precision,
             verbose=False,
         )
-
+        
+        # ... (后续 PyTorch 处理逻辑保持原样，或者直接复制原来的代码)
+        # 为简洁起见，如果你的系统只用 ONNX，上面的 ONNX 分支已经足够。
+        # 如果需要保留 PyTorch 分支，请保留原文件里 `if results:` 之后的部分
+        
         detections: List[Dict[str, Any]] = []
         annotated_image: Optional[np.ndarray] = None
 
@@ -210,10 +262,7 @@ class MaskDetectionAPI:
                     )
 
             if return_annotated:
-                annotated_image = result.plot()  # BGR numpy array
-
-        if annotated_image is None and return_annotated:
-            annotated_image = self._annotate_image(image.copy(), detections)
+                annotated_image = result.plot()
 
         return {
             "success": True,
