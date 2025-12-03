@@ -3,11 +3,11 @@
 
 ## 项目简介
 
-本项目为毕业设计，基于YOLOv11n/YOLOv7深度学习模型，支持高效、轻量的口罩佩戴检测。系统包含模型训练、ONNX导出、FastAPI/ONNXRuntime后端推理、前端实时检测等完整流程，适配4GB显存环境，支持微信小程序等Web端部署。
+本项目为毕业设计，基于YOLOv11n深度学习模型，支持高效、轻量的口罩佩戴检测。系统包含模型训练、ONNX导出、FastAPI/ONNXRuntime后端推理、前端实时检测等完整流程，适配4GB显存环境，支持微信小程序等Web端部署。
 
 ## 主要特性
 
-- **AI模型**：YOLOv11n/YOLOv7，支持自定义结构与消融实验
+- **AI模型**：YOLOv11n，支持自定义结构与消融实验
 - **训练脚本**：支持自动batch size优化、混合精度、丰富数据增强
 - **后端服务**：FastAPI/ONNXRuntime，RESTful接口，支持Base64和文件上传
 - **前端**：现代化网页端，支持实时视频流检测
@@ -19,7 +19,6 @@
 ```
 ├── models/                  # 训练脚本与模型
 │   ├── train_yolov11_mask_detection.py  # YOLOv11n训练主脚本
-│   ├── train_yolov7_mask_detection.py   # YOLOv7训练主脚本
 │   └── weights/            # 训练权重与ONNX模型
 ├── backend/                 # FastAPI后端
 │   ├── app.py               # 主服务（YOLOv11n）
