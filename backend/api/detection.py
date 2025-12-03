@@ -1,18 +1,15 @@
-﻿"""
+"""
 Mask detection API built around YOLOv11 as the primary model.
-Falls back to the archived YOLOv7 implementation for baseline comparisons.
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
 import time
 from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
-import torch
 
 from backend.utils.model_loader import ModelLoader
 
@@ -86,10 +83,7 @@ class MaskDetectionAPI:
 
         start_time = time.time()
         try:
-            if self.model_loader.model_type in ("yolov11", "onnx"):
-                result = self._detect_with_yolov11(image, return_annotated)
-            else:
-                result = self._detect_with_yolov7(image, return_annotated)
+            result = self._detect_with_yolov11(image, return_annotated)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Detection failed: %s", exc)
             return self._create_error_result(f"Detection failed: {exc}")
@@ -103,7 +97,7 @@ class MaskDetectionAPI:
             result.get("detection_count", 0),
             inference_time * 1000,
         )
-        print("[DEBUG] 推理结果:", result)
+        # print("[DEBUG] 推理结果:", result)
         return result
 
     def detect_batch(self, images: List[np.ndarray], return_annotated: bool = True) -> List[Dict[str, Any]]:
@@ -116,13 +110,8 @@ class MaskDetectionAPI:
     # ------------------------------------------------------------------
     # YOLOv11 path
     # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # 替换 backend/api/detection.py 中的 _detect_with_yolov11 方法
-    # ------------------------------------------------------------------
     def _detect_with_yolov11(self, image: np.ndarray, return_annotated: bool) -> Dict[str, Any]:
-        import cv2
-        import numpy as np
-
+        
         # 1. ONNX 推理分支
         if self.model_loader.model_type == "onnx":
             ort_session = self.model_loader.ort_session
@@ -213,7 +202,7 @@ class MaskDetectionAPI:
                 "annotated_image": annotated_image if return_annotated else None,
             }
 
-        # PyTorch/Ultralytics 分支 (保持不变)
+        # PyTorch/Ultralytics 分支
         model = self.model_loader.get_model()
         device_arg = str(self.model_loader.device)
         half_precision = self.model_loader.device.type == "cuda"
@@ -228,10 +217,6 @@ class MaskDetectionAPI:
             half=half_precision,
             verbose=False,
         )
-        
-        # ... (后续 PyTorch 处理逻辑保持原样，或者直接复制原来的代码)
-        # 为简洁起见，如果你的系统只用 ONNX，上面的 ONNX 分支已经足够。
-        # 如果需要保留 PyTorch 分支，请保留原文件里 `if results:` 之后的部分
         
         detections: List[Dict[str, Any]] = []
         annotated_image: Optional[np.ndarray] = None
@@ -270,68 +255,6 @@ class MaskDetectionAPI:
             "image_shape": image.shape,
             "detection_count": len(detections),
             "annotated_image": annotated_image if return_annotated else None,
-        }
-
-    # ------------------------------------------------------------------
-    # YOLOv7 path (baseline only)
-    # ------------------------------------------------------------------
-    def _detect_with_yolov7(self, image: np.ndarray, return_annotated: bool) -> Dict[str, Any]:
-        try:
-            letterbox_module = importlib.import_module("utils.datasets")
-            general_module = importlib.import_module("utils.general")
-        except ModuleNotFoundError as exc:
-            logger.error("YOLOv7 utilities not available: %s", exc)
-            return self._create_error_result("YOLOv7 utilities not available")
-
-        letterbox = getattr(letterbox_module, "letterbox")
-        non_max_suppression = getattr(general_module, "non_max_suppression")
-        scale_coords = getattr(general_module, "scale_coords")
-
-        processed = letterbox(image, self.img_size, stride=32)[0]
-        processed = processed[:, :, ::-1].transpose(2, 0, 1)  # BGR -> RGB
-        processed = np.ascontiguousarray(processed)
-        tensor = torch.from_numpy(processed).to(self.model_loader.device)
-        tensor = tensor.float() / 255.0
-        if tensor.ndimension() == 3:
-            tensor = tensor.unsqueeze(0)
-
-        with torch.no_grad():
-            predictions = self.model_loader.get_model()(tensor)
-
-        predictions = non_max_suppression(
-            predictions,
-            self.conf_threshold,
-            self.iou_threshold,
-            max_det=self.max_detections,
-        )
-
-        detections: List[Dict[str, Any]] = []
-        for pred in predictions:
-            if pred is None or not len(pred):
-                continue
-            pred[:, :4] = scale_coords((self.img_size, self.img_size), pred[:, :4], image.shape[:2]).round()
-            for *xyxy, conf, cls in pred:
-                x1, y1, x2, y2 = map(int, xyxy)
-                class_id = int(cls)
-                class_name = self.class_names.get(class_id, f"class_{class_id}")
-                detections.append(
-                    {
-                        "bbox": [x1, y1, x2, y2],
-                        "confidence": float(conf),
-                        "class_id": class_id,
-                        "class_name": class_name,
-                        "center": [(x1 + x2) // 2, (y1 + y2) // 2],
-                        "area": (x2 - x1) * (y2 - y1),
-                    }
-                )
-
-        annotated_image = self._annotate_image(image.copy(), detections) if return_annotated else None
-        return {
-            "success": True,
-            "detections": detections,
-            "image_shape": image.shape,
-            "detection_count": len(detections),
-            "annotated_image": annotated_image,
         }
 
     # ------------------------------------------------------------------
