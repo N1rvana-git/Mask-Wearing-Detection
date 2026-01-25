@@ -12,7 +12,7 @@ services:
     volumes:
       - ./backend/uploads:/app/backend/uploads
       - ./logs:/app/logs
-      - ./models/weights:/app/models/weights
+      - ./weights:/app/weights
     environment:
       - APP_ENV=production
       - PYTHONPATH=/app
@@ -39,7 +39,7 @@ services:
       - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./deployment/nginx/default.conf:/etc/nginx/conf.d/default.conf
       - ./frontend:/usr/share/nginx/html
-      - ./deployment/ssl:/etc/nginx/ssl
+      - ./deployment/nginx/ssl:/etc/nginx/ssl
     depends_on:
       - backend
     networks:

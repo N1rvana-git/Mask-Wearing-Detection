@@ -1,0 +1,9 @@
+path: e:/graduation_project/Mask-Wearing-Detection/data/combined_dataset
+train: images/train
+val: images/val
+test: images/val
+nc: 3
+names:
+- R_mask
+- W_mask
+- N_mask

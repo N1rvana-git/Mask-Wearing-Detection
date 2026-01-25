@@ -72,7 +72,7 @@ Page({
   _connectSocket() {
     if (this.socket) return;
     // 修改为你的实际电脑局域网IP和8000端口
-    const url = app?.globalData?.apiBaseUrl || "ws://192.168.1.4:5000/ws";
+    const url = app?.globalData?.apiBaseUrl || "ws://192.168.31.85:5000/ws";
     this.socket = wx.connectSocket({ url });
     this.socket.onOpen(() => {
       this.setData({ connected: true });

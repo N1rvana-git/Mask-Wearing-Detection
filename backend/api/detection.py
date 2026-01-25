@@ -32,11 +32,16 @@ class MaskDetectionAPI:
         self.max_detections = DEFAULT_MAX_DETECTIONS
         self.img_size = DEFAULT_IMAGE_SIZE
 
-        self.class_names: Dict[int, str] = {0: "mask", 1: "no_mask"}
+        self.class_names: Dict[int, str] = {
+            0: "mask",           # R_mask: 正确佩戴
+            1: "incorrect_mask", # W_mask: 佩戴不规范
+            2: "no_mask"         # N_mask: 未佩戴
+        }
         
         self.colors = {
-            "no_mask": (0, 0, 255), # 没戴口罩显示红色框
-            "mask": (0, 255, 0),    # 戴口罩显示绿色框
+            "no_mask": (0, 0, 255),        # 红色
+            "incorrect_mask": (0, 255, 255), # 黄色 (BGR: Blue=0, Green=255, Red=255)
+            "mask": (0, 255, 0),           # 绿色
         }
 
         self.detection_stats = {
@@ -67,6 +72,7 @@ class MaskDetectionAPI:
             elif isinstance(names, (list, tuple)):
                 self.class_names = {idx: name for idx, name in enumerate(names)}
 
+            logger.info("Loaded model classes: %s", list(self.class_names.values())[:10])
             logger.info("Detection API initialised using %s", info.get("model_type", "unknown model"))
             return True
         except Exception as exc:  # noqa: BLE001

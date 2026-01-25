@@ -35,9 +35,6 @@ COPY . .
 # 创建必要的目录
 RUN mkdir -p models/weights logs
 
-# 下载YOLOv5模型（如果需要）
-RUN python models/download_yolov5.py
-
 # 设置权限
 RUN chmod +x deployment/scripts/start.sh
 

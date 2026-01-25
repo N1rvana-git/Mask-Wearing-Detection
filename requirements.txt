@@ -2,6 +2,8 @@
 torch>=1.7.0
 torchvision>=0.8.0
 torchaudio>=0.7.0
+ultralytics>=8.0.0
+onnxruntime>=1.15.0
 
 # YOLOv7相关依赖
 # YOLOv7使用原生PyTorch实现，无需额外的ultralytics包

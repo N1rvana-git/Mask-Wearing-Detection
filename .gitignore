@@ -32,3 +32,7 @@ __pycache__/
 *.tar.gz
 *.7z
 *.rar
+data/combined_dataset/
+epoch/
+*.exe
+deployment/nginx/ssl/

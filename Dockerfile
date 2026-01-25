@@ -10,6 +10,15 @@ ENV UVICORN_APP=backend.app:app
 ENV UVICORN_HOST=0.0.0.0
 ENV UVICORN_PORT=5000
 
+# 1. 换源：使用清华源替换 Debian 默认源，加速 apt-get (兼容 Debian Bookworm /etc/apt/sources.list.d/debian.sources)
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
+        sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources; \
+    else \
+        sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
+        sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list; \
+    fi
+
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     libgl1 \
@@ -27,13 +36,13 @@ RUN apt-get update && apt-get install -y \
 
 # 复制requirements文件并安装Python依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --no-cache-dir -r requirements.txt
 
 # 复制应用代码
 COPY . .
 
 # 创建必要的目录
-RUN mkdir -p backend/uploads logs models/weights
+RUN mkdir -p backend/uploads logs weights
 
 # 设置权限
 RUN chmod -R 755 /app

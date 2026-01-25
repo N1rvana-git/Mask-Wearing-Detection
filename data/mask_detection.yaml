@@ -1,6 +1,6 @@
 ﻿nc: 3
 # Mask Detection Dataset Configuration (generated via data/prepare_dataset.py)
-path: E:/graduation_project/maskdataset/maskdata2
+path: E:/graduation_project/Mask-Wearing-Detection/maskdataset/maskdata2
 train: images/train
 val: images/val
 test: images/test

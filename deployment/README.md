@@ -167,6 +167,8 @@ environment:
 - `./backend/uploads:/app/backend/uploads` - 上传文件存储
 - `./logs:/app/logs` - 应用日志
 - `./models/weights:/app/models/weights` - 模型权重文件
+- `./frontend:/usr/share/nginx/html` - 前端静态资源（Nginx 根目录）
+- `./deployment/nginx/ssl:/etc/nginx/ssl` - SSL 证书目录
 
 ## 🐛 故障排除
 

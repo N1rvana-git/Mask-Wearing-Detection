@@ -80,9 +80,17 @@ class ModelLoader:
     def _get_default_model_path(self) -> str:
         # 调试输出权重目录和目标文件
         print(f"[DEBUG] weights_dir: {self.weights_dir.resolve()}")
+
+        onnx_available = False
+        try:
+            import onnxruntime  # noqa: F401
+            onnx_available = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("onnxruntime unavailable, skipping ONNX weights (%s)", exc)
+
         custom_onnx = self.weights_dir / "best.onnx"
         print(f"[DEBUG] custom_onnx: {custom_onnx.resolve()} exists: {custom_onnx.exists()}")
-        if custom_onnx.exists():
+        if onnx_available and custom_onnx.exists():
             logger.info("Using custom ONNX weights: %s", custom_onnx)
             return str(custom_onnx)
         
@@ -124,10 +132,18 @@ class ModelLoader:
         try:
             if self.model_path.endswith(".onnx"):
                 return self._load_onnx_model()
-            else:
-                return self._load_pt_model()
+            return self._load_pt_model()
         except Exception as exc:
             logger.exception("Failed to load model: %s", exc)
+            # Fallback to a known Ultralytics baseline if custom weights fail
+            fallback_path = "yolo11n.pt"
+            if self.model_path != fallback_path:
+                logger.warning("Falling back to %s", fallback_path)
+                self.model_path = fallback_path
+                try:
+                    return self._load_pt_model()
+                except Exception as fallback_exc:
+                    logger.exception("Fallback model load failed: %s", fallback_exc)
             self._loaded = False
             return False
 

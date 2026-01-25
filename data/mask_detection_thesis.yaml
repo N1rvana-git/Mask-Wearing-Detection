@@ -1,0 +1,7 @@
+path: E:/graduation_project/Mask-Wearing-Detection/maskdataset/maskdata3
+train: images/train
+val: images/val
+# test: images/test # Test images missing in this subset
+
+nc: 3
+names: ['R_mask', 'W_mask', 'N_mask']
