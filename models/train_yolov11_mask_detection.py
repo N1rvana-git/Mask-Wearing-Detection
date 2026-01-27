@@ -172,6 +172,11 @@ class YOLOv11MaskDetectionTrainer:
             print("\n📥 加载自定义YOLOv11n结构（含GAM/WIoU/P2）...")
             custom_cfg = str(self.project_root / "models" / "configs" / "yolo11n_mask_custom.yaml")
             model = YOLO(custom_cfg)
+            # Technical Advisory Note:
+            # 标准 YOLO 训练器可能不会自动读取 model.criterion。
+            # 若需 WIoU 完全生效做梯度回传，建议在 ultralytics/utils/loss.py 中进行底层集成，
+            # 或自定义 DetectionTrainer 类并重写 init_loss 方法。
+            # 当前配置下，结构改进(GAM/P2)已完全生效。
         else:
             print(f"\n📥 加载YOLOv11n模型...")
             model = YOLO(f'{self.model_size}.pt')

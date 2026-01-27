@@ -13,10 +13,10 @@ class CustomYOLOv11n(DetectionModel):
     """
     def __init__(self, cfg='models/configs/yolo11n_mask_custom.yaml', ch=3, nc=3, **kwargs):
         super().__init__(cfg=cfg, ch=ch, nc=nc, **kwargs)
-        # 插入GAM注意力模块（示例：插入到backbone最后一层）
-        if hasattr(self, 'backbone') and isinstance(self.backbone, torch.nn.ModuleList):
-            self.backbone.append(GAMAttention(self.backbone[-1].out_channels))
-        # 替换损失函数为WIoU
+        # 注意: GAMAttention 已在 YAML 配置文件中定义 (models/configs/yolo11n_mask_custom.yaml)
+        # 因此此处无需手动 append 到 backbone，Ultralytics 会根据 YAML 自动解析并构建层级结构。
+        
+        # 替换损失函数标记 (实际生效需配合 Trainer 使用)
         self.criterion = WIoULoss()
         # 可扩展：根据cfg动态插入P2检测头等
 
